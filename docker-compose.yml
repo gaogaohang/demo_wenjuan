@@ -1,0 +1,124 @@
+version: '3.8'
+
+services:
+  # MySQL Database
+  mysql:
+    image: mysql:8.0
+    container_name: couple_platform_mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: couple123456
+      MYSQL_DATABASE: couple_platform
+      MYSQL_USER: couple_user
+      MYSQL_PASSWORD: couple_pass
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+      - ./database/init-data.sql:/docker-entrypoint-initdb.d/02-init-data.sql
+    networks:
+      - couple_platform_network
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: couple_platform_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - couple_platform_network
+
+  # MinIO Object Storage
+  minio:
+    image: minio/minio:latest
+    container_name: couple_platform_minio
+    environment:
+      MINIO_ROOT_USER: couple_admin
+      MINIO_ROOT_PASSWORD: couple123456
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    networks:
+      - couple_platform_network
+
+  # Backend Spring Boot Application
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: couple_platform_backend
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/couple_platform?useSSL=false&serverTimezone=Asia/Shanghai
+      SPRING_DATASOURCE_USERNAME: couple_user
+      SPRING_DATASOURCE_PASSWORD: couple_pass
+      SPRING_REDIS_HOST: redis
+      SPRING_REDIS_PORT: 6379
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: couple_admin
+      MINIO_SECRET_KEY: couple123456
+    ports:
+      - "8080:8080"
+    depends_on:
+      - mysql
+      - redis
+      - minio
+    networks:
+      - couple_platform_network
+
+  # Frontend Vue 3 Application
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: couple_platform_frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - couple_platform_network
+
+  # Admin Frontend
+  admin-frontend:
+    build:
+      context: ./admin-frontend
+      dockerfile: Dockerfile
+    container_name: couple_platform_admin
+    ports:
+      - "3001:80"
+    depends_on:
+      - backend
+    networks:
+      - couple_platform_network
+
+  # Nginx Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    container_name: couple_platform_nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/ssl:/etc/nginx/ssl
+    depends_on:
+      - backend
+      - frontend
+      - admin-frontend
+    networks:
+      - couple_platform_network
+
+volumes:
+  mysql_data:
+  redis_data:
+  minio_data:
+
+networks:
+  couple_platform_network:
+    driver: bridge

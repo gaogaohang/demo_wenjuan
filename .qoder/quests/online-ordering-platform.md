@@ -1178,6 +1178,131 @@ public class FileStorageService {
 }
 ```
 
+#### 8.2.4 前端配置文件
+
+**package.json**
+```json
+{
+  "name": "couple-platform-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "eslint src --ext .vue,.js,.ts --fix"
+  },
+  "dependencies": {
+    "vue": "^3.4.0",
+    "vue-router": "^4.2.0",
+    "pinia": "^2.1.0",
+    "vant": "^4.8.0",
+    "axios": "^1.6.0",
+    "@vant/touch-emulator": "^1.4.0",
+    "socket.io-client": "^4.7.0",
+    "workbox-window": "^7.0.0",
+    "vue-cropper": "^1.0.0",
+    "emoji-js": "^8.0.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^4.5.0",
+    "@vant/auto-import-resolver": "^1.2.0",
+    "unplugin-auto-import": "^0.17.0",
+    "unplugin-vue-components": "^0.26.0",
+    "vite": "^5.0.0",
+    "vite-plugin-pwa": "^0.17.0",
+    "sass": "^1.69.0",
+    "eslint": "^8.55.0",
+    "eslint-plugin-vue": "^9.19.0"
+  }
+}
+```
+
+**vite.config.js**
+```javascript
+import { defineConfig } from 'vite'
+import vue from '@vitejs/plugin-vue'
+import { VantResolver } from '@vant/auto-import-resolver'
+import AutoImport from 'unplugin-auto-import/vite'
+import Components from 'unplugin-vue-components/vite'
+import { VitePWA } from 'vite-plugin-pwa'
+import path from 'path'
+
+export default defineConfig({
+  plugins: [
+    vue(),
+    AutoImport({
+      resolvers: [VantResolver()],
+      imports: ['vue', 'vue-router', 'pinia']
+    }),
+    Components({
+      resolvers: [VantResolver()]
+    }),
+    VitePWA({
+      registerType: 'autoUpdate',
+      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
+      manifest: {
+        name: '情侣互动平台',
+        short_name: '情侣互动',
+        description: '情侣间的在线点单与问卷互动平台',
+        theme_color: '#007AFF',
+        background_color: '#ffffff',
+        display: 'standalone',
+        orientation: 'portrait',
+        scope: '/',
+        start_url: '/',
+        icons: [
+          {
+            src: 'icons/icon-72x72.png',
+            sizes: '72x72',
+            type: 'image/png'
+          },
+          {
+            src: 'icons/icon-192x192.png',
+            sizes: '192x192',
+            type: 'image/png'
+          },
+          {
+            src: 'icons/icon-512x512.png',
+            sizes: '512x512',
+            type: 'image/png'
+          }
+        ]
+      },
+      workbox: {
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        runtimeCaching: [
+          {
+            urlPattern: /^https:\/\/api\./,
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'api-cache',
+              cacheableResponse: {
+                statuses: [0, 200]
+              }
+            }
+          }
+        ]
+      }
+    })
+  ],
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, 'src')
+    }
+  },
+  server: {
+    port: 3000,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8080',
+        changeOrigin: true
+      }
+    }
+  }
+})
+```
+
 #### 4.5.3 表情系统设计
 
 ```java
@@ -1483,11 +1608,907 @@ stateDiagram-v2
 - **管理后台测试**：管理员功能的专项测试
 - **推送功能测试**：模拟PWA推送服务测试
 
-### 7.3 测试覆盖率目标
+## 8. 代码实现指南
 
-| 测试类型 | 覆盖率目标 | 工具 |
-|----------|------------|------|
-| 后端单元测试 | >80% | JaCoCo |
-| 前端单元测试 | >70% | Jest Coverage |
-| API集成测试 | >90% | Spring Boot Test |
-| E2E测试 | 核心功能100% | Cypress |
+### 8.1 项目结构创建
+
+#### 8.1.1 后端项目结构 (backend/)
+
+```
+backend/
+├── src/
+│   ├── main/
+│   │   ├── java/
+│   │   │   └── com/
+│   │   │       └── couple/
+│   │   │           └── platform/
+│   │   │               ├── OnlineOrderingPlatformApplication.java
+│   │   │               ├── config/
+│   │   │               │   ├── SecurityConfig.java
+│   │   │               │   ├── WebSocketConfig.java
+│   │   │               │   ├── MinioConfig.java
+│   │   │               │   ├── RedisConfig.java
+│   │   │               │   └── CorsConfig.java
+│   │   │               ├── controller/
+│   │   │               │   ├── AuthController.java
+│   │   │               │   ├── UserController.java
+│   │   │               │   ├── OrderController.java
+│   │   │               │   ├── SurveyController.java
+│   │   │               │   ├── FileController.java
+│   │   │               │   ├── AdminController.java
+│   │   │               │   └── WebSocketController.java
+│   │   │               ├── service/
+│   │   │               │   ├── UserService.java
+│   │   │               │   ├── AuthService.java
+│   │   │               │   ├── OrderService.java
+│   │   │               │   ├── SurveyService.java
+│   │   │               │   ├── FileStorageService.java
+│   │   │               │   ├── WeChatService.java
+│   │   │               │   ├── SmsService.java
+│   │   │               │   ├── EmojiService.java
+│   │   │               │   └── PushNotificationService.java
+│   │   │               ├── repository/
+│   │   │               │   ├── UserRepository.java
+│   │   │               │   ├── OrderRepository.java
+│   │   │               │   ├── SurveyRepository.java
+│   │   │               │   ├── MediaFileRepository.java
+│   │   │               │   ├── EmojiRepository.java
+│   │   │               │   └── AdminRepository.java
+│   │   │               ├── entity/
+│   │   │               │   ├── User.java
+│   │   │               │   ├── Order.java
+│   │   │               │   ├── OrderItem.java
+│   │   │               │   ├── OrderEvaluation.java
+│   │   │               │   ├── Survey.java
+│   │   │               │   ├── SurveyQuestion.java
+│   │   │               │   ├── SurveySubmission.java
+│   │   │               │   ├── SurveyResponse.java
+│   │   │               │   ├── MediaFile.java
+│   │   │               │   ├── EmojiPackage.java
+│   │   │               │   ├── Emoji.java
+│   │   │               │   ├── SmsCode.java
+│   │   │               │   ├── Admin.java
+│   │   │               │   └── PushNotification.java
+│   │   │               ├── dto/
+│   │   │               │   ├── request/
+│   │   │               │   ├── response/
+│   │   │               │   └── common/
+│   │   │               ├── security/
+│   │   │               │   ├── JwtAuthenticationFilter.java
+│   │   │               │   ├── JwtTokenProvider.java
+│   │   │               │   └── UserPrincipal.java
+│   │   │               ├── exception/
+│   │   │               │   ├── GlobalExceptionHandler.java
+│   │   │               │   └── CustomExceptions.java
+│   │   │               └── util/
+│   │   │                   ├── FileUtils.java
+│   │   │                   ├── SmsUtils.java
+│   │   │                   └── ValidationUtils.java
+│   │   └── resources/
+│   │       ├── application.yml
+│   │       ├── application-dev.yml
+│   │       ├── application-prod.yml
+│   │       └── db/
+│   │           └── migration/
+│   │               └── V1__Initial_schema.sql
+│   └── test/
+├── pom.xml
+└── README.md
+```
+
+#### 8.1.2 前端项目结构 (frontend/)
+
+```
+frontend/
+├── public/
+│   ├── index.html
+│   ├── manifest.json
+│   ├── sw.js
+│   └── icons/
+├── src/
+│   ├── main.js
+│   ├── App.vue
+│   ├── components/
+│   │   ├── common/
+│   │   │   ├── Header.vue
+│   │   │   ├── TabBar.vue
+│   │   │   ├── Loading.vue
+│   │   │   └── EmojiPicker.vue
+│   │   ├── order/
+│   │   │   ├── OrderList.vue
+│   │   │   ├── OrderCreate.vue
+│   │   │   ├── OrderDetail.vue
+│   │   │   └── OrderEvaluation.vue
+│   │   ├── survey/
+│   │   │   ├── SurveyList.vue
+│   │   │   ├── SurveyCreate.vue
+│   │   │   ├── SurveyFill.vue
+│   │   │   ├── SurveyAnalysis.vue
+│   │   │   └── question-types/
+│   │   │       ├── SingleChoice.vue
+│   │   │       ├── MultipleChoice.vue
+│   │   │       ├── TextInput.vue
+│   │   │       └── RatingQuestion.vue
+│   │   └── user/
+│   │       ├── Login.vue
+│   │       ├── Register.vue
+│   │       ├── Profile.vue
+│   │       ├── PairSetup.vue
+│   │       └── ThemeSettings.vue
+│   ├── views/
+│   │   ├── Dashboard.vue
+│   │   ├── Orders.vue
+│   │   ├── Surveys.vue
+│   │   └── Settings.vue
+│   ├── router/
+│   │   └── index.js
+│   ├── stores/
+│   │   ├── user.js
+│   │   ├── order.js
+│   │   ├── survey.js
+│   │   ├── message.js
+│   │   └── theme.js
+│   ├── api/
+│   │   ├── auth.js
+│   │   ├── user.js
+│   │   ├── order.js
+│   │   ├── survey.js
+│   │   ├── file.js
+│   │   └── websocket.js
+│   ├── utils/
+│   │   ├── request.js
+│   │   ├── auth.js
+│   │   ├── storage.js
+│   │   └── notification.js
+│   ├── styles/
+│   │   ├── main.scss
+│   │   ├── variables.scss
+│   │   ├── apple-theme.scss
+│   │   └── responsive.scss
+│   └── assets/
+│       ├── images/
+│       ├── icons/
+│       └── emojis/
+├── package.json
+├── vite.config.js
+└── README.md
+```
+
+#### 8.1.3 管理后台项目结构 (admin/)
+
+```
+admin/
+├── src/
+│   ├── main.js
+│   ├── App.vue
+│   ├── components/
+│   │   ├── layout/
+│   │   │   ├── AdminLayout.vue
+│   │   │   ├── Sidebar.vue
+│   │   │   └── Header.vue
+│   │   ├── charts/
+│   │   │   ├── UserChart.vue
+│   │   │   ├── OrderChart.vue
+│   │   │   └── SurveyChart.vue
+│   │   └── tables/
+│   │       ├── UserTable.vue
+│   │       ├── OrderTable.vue
+│   │       └── SurveyTable.vue
+│   ├── views/
+│   │   ├── Login.vue
+│   │   ├── Dashboard.vue
+│   │   ├── UserManagement.vue
+│   │   ├── OrderManagement.vue
+│   │   ├── SurveyManagement.vue
+│   │   ├── FileManagement.vue
+│   │   └── SystemSettings.vue
+│   ├── router/
+│   │   └── index.js
+│   ├── stores/
+│   │   ├── admin.js
+│   │   └── statistics.js
+│   └── api/
+│       ├── admin.js
+│       └── statistics.js
+├── package.json
+### 8.2 关键代码模板
+
+#### 8.2.1 后端配置文件
+
+**pom.xml**
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.2.0</version>
+        <relativePath/>
+    </parent>
+    
+    <groupId>com.couple</groupId>
+    <artifactId>online-ordering-platform</artifactId>
+    <version>1.0.0</version>
+    <name>online-ordering-platform</name>
+    <description>情侣互动在线点单与问卷平台</description>
+    
+    <properties>
+        <java.version>17</java.version>
+        <minio.version>8.5.7</minio.version>
+        <jwt.version>4.4.0</jwt.version>
+    </properties>
+    
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-websocket</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>mysql</groupId>
+            <artifactId>mysql-connector-java</artifactId>
+            <version>8.0.33</version>
+        </dependency>
+        <dependency>
+            <groupId>io.minio</groupId>
+            <artifactId>minio</artifactId>
+            <version>${minio.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.auth0</groupId>
+            <artifactId>java-jwt</artifactId>
+            <version>${jwt.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+    </dependencies>
+</project>
+```
+
+**application.yml**
+```yaml
+server:
+  port: 8080
+  servlet:
+    context-path: /api
+
+spring:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/couple_platform?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:password}
+    
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    database-platform: org.hibernate.dialect.MySQL8Dialect
+    
+  redis:
+    host: ${REDIS_HOST:localhost}
+    port: ${REDIS_PORT:6379}
+    password: ${REDIS_PASSWORD:}
+    database: 0
+    
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
+
+# MinIO Configuration
+minio:
+  endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
+  access-key: ${MINIO_ACCESS_KEY:minioadmin}
+  secret-key: ${MINIO_SECRET_KEY:minioadmin}
+  bucket:
+    images: couple-images
+    files: couple-files
+
+# JWT Configuration
+jwt:
+  secret: ${JWT_SECRET:couple-platform-jwt-secret-key-2024}
+  expiration: 86400000  # 24 hours
+
+# WeChat Configuration
+wechat:
+  appid: ${WECHAT_APPID:your_wechat_appid}
+  secret: ${WECHAT_SECRET:your_wechat_secret}
+  redirect-uri: ${WECHAT_REDIRECT_URI:http://localhost:3000/auth/wechat/callback}
+
+# SMS Configuration
+sms:
+  provider: aliyun  # or tencent
+  access-key: ${SMS_ACCESS_KEY:your_sms_access_key}
+  secret-key: ${SMS_SECRET_KEY:your_sms_secret_key}
+  template:
+    register: SMS_123456
+    login: SMS_123457
+  sign-name: 情侣互动
+
+# Push Notification
+vapid:
+  public-key: ${VAPID_PUBLIC_KEY:your_vapid_public_key}
+  private-key: ${VAPID_PRIVATE_KEY:your_vapid_private_key}
+  subject: ${VAPID_SUBJECT:mailto:your-email@example.com}
+
+logging:
+  level:
+    com.couple.platform: debug
+  pattern:
+#### 8.2.2 核心实体类
+
+**User.java**
+```java
+package com.couple.platform.entity;
+
+import jakarta.persistence.*;
+import lombok.Data;
+import lombok.EqualsAndHashCode;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
+
+import java.time.LocalDateTime;
+
+@Data
+@Entity
+@Table(name = "users")
+@EqualsAndHashCode(callSuper = false)
+public class User {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+    
+    @Column(unique = true, nullable = false, length = 20)
+    private String phone;
+    
+    @Column(unique = true, length = 50)
+    private String username;
+    
+    @Column(length = 255)
+    private String password;
+    
+    @Column(name = "wechat_openid", unique = true, length = 100)
+    private String wechatOpenid;
+    
+    @Column(name = "wechat_unionid", length = 100)
+    private String wechatUnionid;
+    
+    @Column(length = 50)
+    private String nickname;
+    
+    @Column(name = "avatar_url", length = 255)
+    private String avatarUrl;
+    
+    @Column(name = "partner_id")
+    private Long partnerId;
+    
+    @Column(name = "pair_code", unique = true, length = 20)
+    private String pairCode;
+    
+    @Column(name = "theme_settings", columnDefinition = "JSON")
+    private String themeSettings;
+    
+    @Column(name = "push_subscription", columnDefinition = "JSON")
+    private String pushSubscription;
+    
+    @Enumerated(EnumType.STRING)
+    @Column(name = "login_type")
+    private LoginType loginType = LoginType.PHONE;
+    
+    @Enumerated(EnumType.STRING)
+    private Status status = Status.ACTIVE;
+    
+    @CreationTimestamp
+    @Column(name = "created_at")
+    private LocalDateTime createdAt;
+    
+    @UpdateTimestamp
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
+    
+    public enum LoginType {
+        PHONE, WECHAT, BOTH
+    }
+    
+    public enum Status {
+        ACTIVE, INACTIVE, BANNED
+    }
+}
+```
+
+**Order.java**
+```java
+package com.couple.platform.entity;
+
+import jakarta.persistence.*;
+import lombok.Data;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
+
+import java.time.LocalDateTime;
+import java.util.List;
+
+@Data
+@Entity
+@Table(name = "orders")
+public class Order {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+    
+    @Column(name = "creator_id", nullable = false)
+    private Long creatorId;
+    
+    @Column(name = "assignee_id", nullable = false)
+    private Long assigneeId;
+    
+    @Column(nullable = false, length = 100)
+    private String title;
+    
+    @Column(columnDefinition = "TEXT")
+    private String description;
+    
+    @Enumerated(EnumType.STRING)
+    @Column(name = "order_type")
+    private OrderType orderType = OrderType.FOOD;
+    
+    @Enumerated(EnumType.STRING)
+    private Status status = Status.PENDING;
+    
+    @Enumerated(EnumType.STRING)
+    private Priority priority = Priority.MEDIUM;
+    
+    @Column(name = "due_time")
+    private LocalDateTime dueTime;
+    
+    @Column(name = "completed_at")
+    private LocalDateTime completedAt;
+    
+    @CreationTimestamp
+    @Column(name = "created_at")
+    private LocalDateTime createdAt;
+    
+    @UpdateTimestamp
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
+    
+    @OneToMany(mappedBy = "orderId", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    private List<OrderItem> items;
+    
+    @OneToOne(mappedBy = "orderId", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    private OrderEvaluation evaluation;
+    
+    public enum OrderType {
+        FOOD, DRINK, SNACK, OTHER
+    }
+    
+    public enum Status {
+        PENDING, ACCEPTED, IN_PROGRESS, COMPLETED, CANCELLED
+    }
+    
+    public enum Priority {
+        LOW, MEDIUM, HIGH
+    }
+}
+```
+
+**Survey.java**
+```java
+package com.couple.platform.entity;
+
+import jakarta.persistence.*;
+import lombok.Data;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
+
+import java.time.LocalDateTime;
+import java.util.List;
+
+@Data
+@Entity
+@Table(name = "surveys")
+public class Survey {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+    
+    @Column(name = "creator_id", nullable = false)
+    private Long creatorId;
+    
+    @Column(nullable = false, length = 200)
+    private String title;
+    
+    @Column(columnDefinition = "TEXT")
+    private String description;
+    
+    @Enumerated(EnumType.STRING)
+    private Status status = Status.DRAFT;
+    
+    @Column(nullable = false)
+    private Boolean anonymous = false;
+    
+    @Column(name = "multiple_submit", nullable = false)
+    private Boolean multipleSubmit = false;
+    
+    @Column(name = "start_time")
+    private LocalDateTime startTime;
+    
+    @Column(name = "end_time")
+    private LocalDateTime endTime;
+    
+    @CreationTimestamp
+    @Column(name = "created_at")
+    private LocalDateTime createdAt;
+    
+    @UpdateTimestamp
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
+    
+    @OneToMany(mappedBy = "surveyId", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @OrderBy("orderIndex ASC")
+    private List<SurveyQuestion> questions;
+    
+    @OneToMany(mappedBy = "surveyId", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    private List<SurveySubmission> submissions;
+    
+#### 8.2.3 核心服务类
+
+**AuthService.java**
+```java
+package com.couple.platform.service;
+
+import com.couple.platform.entity.User;
+import com.couple.platform.entity.SmsCode;
+import com.couple.platform.repository.UserRepository;
+import com.couple.platform.repository.SmsCodeRepository;
+import com.couple.platform.security.JwtTokenProvider;
+import com.couple.platform.dto.request.LoginRequest;
+import com.couple.platform.dto.request.RegisterRequest;
+import com.couple.platform.dto.response.AuthResponse;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
+import java.util.Optional;
+import java.util.Random;
+
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class AuthService {
+    
+    private final UserRepository userRepository;
+    private final SmsCodeRepository smsCodeRepository;
+    private final PasswordEncoder passwordEncoder;
+    private final JwtTokenProvider tokenProvider;
+    private final SmsService smsService;
+    private final WeChatService weChatService;
+    
+    @Transactional
+    public AuthResponse register(RegisterRequest request) {
+        // 1. 验证手机号是否已注册
+        if (userRepository.existsByPhone(request.getPhone())) {
+            throw new IllegalArgumentException("手机号已被注册");
+        }
+        
+        // 2. 验证短信验证码
+        validateSmsCode(request.getPhone(), request.getSmsCode(), SmsCode.Type.REGISTER);
+        
+        // 3. 创建用户
+        User user = new User();
+        user.setPhone(request.getPhone());
+        user.setPassword(passwordEncoder.encode(request.getPassword()));
+        user.setNickname(request.getNickname());
+        user.setPairCode(generatePairCode());
+        user.setLoginType(User.LoginType.PHONE);
+        user.setStatus(User.Status.ACTIVE);
+        
+        user = userRepository.save(user);
+        
+        // 4. 生成JWT Token
+        String token = tokenProvider.generateToken(user.getId());
+        
+        return AuthResponse.builder()
+                .token(token)
+                .user(convertToUserDto(user))
+                .build();
+    }
+    
+    public AuthResponse login(LoginRequest request) {
+        // 1. 查找用户
+        User user = userRepository.findByPhone(request.getPhone())
+                .orElseThrow(() -> new IllegalArgumentException("用户不存在"));
+        
+        // 2. 验证密码
+        if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+            throw new IllegalArgumentException("密码错误");
+        }
+        
+        // 3. 检查用户状态
+        if (user.getStatus() != User.Status.ACTIVE) {
+            throw new IllegalArgumentException("用户账号已被禁用");
+        }
+        
+        // 4. 生成JWT Token
+        String token = tokenProvider.generateToken(user.getId());
+        
+        return AuthResponse.builder()
+                .token(token)
+                .user(convertToUserDto(user))
+                .build();
+    }
+    
+    public void sendSmsCode(String phone, SmsCode.Type type) {
+        // 1. 检查发送频率（同一手机号1分钟内只能发送一次）
+        Optional<SmsCode> recentCode = smsCodeRepository
+                .findTopByPhoneAndTypeAndCreatedAtAfterOrderByCreatedAtDesc(
+                        phone, type, LocalDateTime.now().minusMinutes(1)
+                );
+        
+        if (recentCode.isPresent()) {
+            throw new IllegalArgumentException("发送太频繁，请1分钟后再试");
+        }
+        
+        // 2. 生成验证码
+        String code = String.format("%06d", new Random().nextInt(1000000));
+        
+        // 3. 保存验证码
+        SmsCode smsCode = new SmsCode();
+        smsCode.setPhone(phone);
+        smsCode.setCode(code);
+        smsCode.setType(type);
+        smsCode.setUsed(false);
+        smsCode.setExpiredAt(LocalDateTime.now().plusMinutes(5)); // 5分钟过期
+        
+        smsCodeRepository.save(smsCode);
+        
+        // 4. 发送短信
+        smsService.sendVerificationCode(phone, code);
+    }
+    
+    @Transactional
+    public AuthResponse wechatLogin(String code) {
+        // 1. 通过微信获取用户信息
+        WeChatService.WeChatUserInfo wechatUser = weChatService.getUserInfo(code);
+        
+        // 2. 查找或创建用户
+        User user = userRepository.findByWechatOpenid(wechatUser.getOpenid())
+                .orElseGet(() -> createUserFromWechat(wechatUser));
+        
+        // 3. 生成JWT Token
+        String token = tokenProvider.generateToken(user.getId());
+        
+        return AuthResponse.builder()
+                .token(token)
+                .user(convertToUserDto(user))
+                .build();
+    }
+    
+    private void validateSmsCode(String phone, String code, SmsCode.Type type) {
+        SmsCode smsCode = smsCodeRepository
+                .findByPhoneAndCodeAndTypeAndUsedFalseAndExpiredAtAfter(
+                        phone, code, type, LocalDateTime.now()
+                )
+                .orElseThrow(() -> new IllegalArgumentException("验证码错误或已过期"));
+        
+        // 标记为已使用
+        smsCode.setUsed(true);
+        smsCodeRepository.save(smsCode);
+    }
+    
+    private User createUserFromWechat(WeChatService.WeChatUserInfo wechatUser) {
+        User user = new User();
+        user.setWechatOpenid(wechatUser.getOpenid());
+        user.setWechatUnionid(wechatUser.getUnionid());
+        user.setNickname(wechatUser.getNickname());
+        user.setAvatarUrl(wechatUser.getHeadimgurl());
+        user.setPairCode(generatePairCode());
+        user.setLoginType(User.LoginType.WECHAT);
+        user.setStatus(User.Status.ACTIVE);
+        
+        return userRepository.save(user);
+    }
+    
+    private String generatePairCode() {
+        String code;
+        do {
+            code = String.format("%08d", new Random().nextInt(100000000));
+        } while (userRepository.existsByPairCode(code));
+        return code;
+    }
+    
+    private UserDto convertToUserDto(User user) {
+        // 转换为DTO对象的逻辑
+        return UserDto.builder()
+                .id(user.getId())
+                .phone(user.getPhone())
+                .nickname(user.getNickname())
+                .avatarUrl(user.getAvatarUrl())
+                .partnerId(user.getPartnerId())
+                .pairCode(user.getPairCode())
+                .build();
+    }
+}
+```
+
+**FileStorageService.java**
+```java
+package com.couple.platform.service;
+
+import com.couple.platform.entity.MediaFile;
+import com.couple.platform.repository.MediaFileRepository;
+import com.couple.platform.dto.response.FileUploadResponse;
+import io.minio.*;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import net.coobird.thumbnailator.Thumbnails;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.util.UUID;
+
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class FileStorageService {
+    
+    private final MinioClient minioClient;
+    private final MediaFileRepository mediaFileRepository;
+    
+    @Value("${minio.bucket.images}")
+    private String imagesBucket;
+    
+    @Value("${minio.bucket.files}")
+    private String filesBucket;
+    
+    @Value("${minio.endpoint}")
+    private String minioEndpoint;
+    
+    public FileUploadResponse uploadImage(MultipartFile file, Long userId) {
+        try {
+            // 1. 验证文件类型
+            validateImageFile(file);
+            
+            // 2. 生成文件名
+            String fileName = generateFileName(file.getOriginalFilename());
+            String objectKey = String.format("images/%d/%s", userId, fileName);
+            
+            // 3. 上传原图
+            uploadToMinio(imagesBucket, objectKey, file);
+            
+            // 4. 生成缩略图
+            String thumbnailKey = generateThumbnail(file, userId, fileName);
+            
+            // 5. 保存文件信息
+            MediaFile mediaFile = new MediaFile();
+            mediaFile.setFileName(fileName);
+            mediaFile.setOriginalName(file.getOriginalFilename());
+            mediaFile.setFileType(MediaFile.FileType.IMAGE);
+            mediaFile.setMimeType(file.getContentType());
+            mediaFile.setFileSize(file.getSize());
+            mediaFile.setFileUrl(generateFileUrl(imagesBucket, objectKey));
+            mediaFile.setThumbnailUrl(generateFileUrl(imagesBucket, thumbnailKey));
+            mediaFile.setBucketName(imagesBucket);
+            mediaFile.setObjectKey(objectKey);
+            mediaFile.setUploadedBy(userId);
+            mediaFile.setStatus(MediaFile.Status.COMPLETED);
+            
+            mediaFile = mediaFileRepository.save(mediaFile);
+            
+            return FileUploadResponse.builder()
+                    .fileId(mediaFile.getId())
+                    .fileUrl(mediaFile.getFileUrl())
+                    .thumbnailUrl(mediaFile.getThumbnailUrl())
+                    .fileName(mediaFile.getFileName())
+                    .fileSize(mediaFile.getFileSize())
+                    .build();
+                    
+        } catch (Exception e) {
+            log.error("图片上传失败", e);
+            throw new RuntimeException("图片上传失败: " + e.getMessage());
+        }
+    }
+    
+    private void validateImageFile(MultipartFile file) {
+        if (file.isEmpty()) {
+            throw new IllegalArgumentException("文件不能为空");
+        }
+        
+        String contentType = file.getContentType();
+        if (contentType == null || !contentType.startsWith("image/")) {
+            throw new IllegalArgumentException("只能上传图片文件");
+        }
+        
+        if (file.getSize() > 10 * 1024 * 1024) { // 10MB
+            throw new IllegalArgumentException("文件大小不能超过10MB");
+        }
+    }
+    
+    private String generateFileName(String originalFilename) {
+        String extension = "";
+        if (originalFilename != null && originalFilename.contains(".")) {
+            extension = originalFilename.substring(originalFilename.lastIndexOf("."));
+        }
+        return UUID.randomUUID().toString() + extension;
+    }
+    
+    private void uploadToMinio(String bucket, String objectKey, MultipartFile file) throws Exception {
+        minioClient.putObject(
+                PutObjectArgs.builder()
+                        .bucket(bucket)
+                        .object(objectKey)
+                        .stream(file.getInputStream(), file.getSize(), -1)
+                        .contentType(file.getContentType())
+                        .build()
+        );
+    }
+    
+    private String generateThumbnail(MultipartFile file, Long userId, String fileName) throws Exception {
+        String thumbnailKey = String.format("thumbnails/%d/%s", userId, fileName);
+        
+        try (ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
+            // 生成200x200的缩略图
+            Thumbnails.of(file.getInputStream())
+                    .size(200, 200)
+                    .outputFormat("jpg")
+                    .toOutputStream(outputStream);
+            
+            byte[] thumbnailData = outputStream.toByteArray();
+            
+            // 上传缩略图
+            minioClient.putObject(
+                    PutObjectArgs.builder()
+                            .bucket(imagesBucket)
+                            .object(thumbnailKey)
+                            .stream(new ByteArrayInputStream(thumbnailData), thumbnailData.length, -1)
+                            .contentType("image/jpeg")
+                            .build()
+            );
+            
+            return thumbnailKey;
+        }
+    }
+    
+    private String generateFileUrl(String bucket, String objectKey) {
+        return String.format("%s/%s/%s", minioEndpoint, bucket, objectKey);
+    }
+    
+    public String generatePresignedUrl(String bucket, String objectKey, int expiry) {
+        try {
+            return minioClient.getPresignedObjectUrl(
+                    GetPresignedObjectUrlArgs.builder()
+                            .method(Method.GET)
+                            .bucket(bucket)
+                            .object(objectKey)
+                            .expiry(expiry)
+                            .build()
+            );
+        } catch (Exception e) {
+            log.error("生成预签名URL失败", e);
+            return null;
+        }
+    }
+}
+```
