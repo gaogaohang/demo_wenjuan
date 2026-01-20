@@ -3,9 +3,10 @@ package com.couple.platform.service;
 import com.couple.platform.dto.user.*;
 import com.couple.platform.entity.User;
 import com.couple.platform.entity.UserSettings;
+import com.couple.platform.enums.ErrorCode;
 import com.couple.platform.exception.BusinessException;
-import com.couple.platform.repository.UserRepository;
-import com.couple.platform.repository.UserSettingsRepository;
+import com.couple.platform.mapper.UserMapper;
+import com.couple.platform.mapper.UserSettingsMapper;
 import com.couple.platform.utils.SecurityUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -22,16 +23,18 @@ import java.time.LocalDateTime;
 @RequiredArgsConstructor
 public class UserService {
     
-    private final UserRepository userRepository;
-    private final UserSettingsRepository userSettingsRepository;
+    private final UserMapper userMapper;
+    private final UserSettingsMapper userSettingsMapper;
     
     /**
      * 获取当前用户信息
      */
     public UserInfoResponse getCurrentUserInfo() {
         Long userId = SecurityUtil.getCurrentUserId();
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new BusinessException("用户不存在"));
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new BusinessException(ErrorCode.USER_NOT_FOUND);
+        }
         
         return buildUserInfoResponse(user);
     }
@@ -42,8 +45,10 @@ public class UserService {
     @Transactional
     public UserInfoResponse updateUserProfile(UserProfileUpdateRequest request) {
         Long userId = SecurityUtil.getCurrentUserId();
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new BusinessException("用户不存在"));
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new BusinessException(ErrorCode.USER_NOT_FOUND);
+        }
         
         // 更新用户资料
         if (request.getNickname() != null) {
@@ -59,7 +64,7 @@ public class UserService {
             user.setBirthday(request.getBirthday());
         }
         
-        userRepository.save(user);
+        userMapper.updateById(user);
         
         log.info("用户资料更新成功: userId={}", userId);
         
@@ -72,31 +77,33 @@ public class UserService {
     @Transactional
     public UserInfoResponse pairWithUser(UserPairRequest request) {
         Long userId = SecurityUtil.getCurrentUserId();
-        User currentUser = userRepository.findById(userId)
-                .orElseThrow(() -> new BusinessException("用户不存在"));
+        User currentUser = userMapper.selectById(userId);
+        if (currentUser == null) {
+            throw new BusinessException(ErrorCode.USER_NOT_FOUND);
+        }
         
         // 检查当前用户是否已配对
         if (currentUser.hasPaired()) {
-            throw new BusinessException("您已经配对过了");
+            throw new BusinessException(ErrorCode.USER_ALREADY_PAIRED, "您已经配对过了");
         }
         
         // 查找配对目标用户
-        User targetUser = userRepository.findByPairCode(request.getPairCode())
-                .orElseThrow(() -> new BusinessException("配对码不存在"));
+        User targetUser = userMapper.findByPairCode(request.getPairCode())
+                .orElseThrow(() -> new BusinessException(ErrorCode.PAIR_CODE_INVALID, "配对码不存在"));
         
         // 检查是否是自己的配对码
         if (targetUser.getId().equals(userId)) {
-            throw new BusinessException("不能与自己配对");
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "不能与自己配对");
         }
         
         // 检查目标用户是否已配对
         if (targetUser.hasPaired()) {
-            throw new BusinessException("对方已经配对过了");
+            throw new BusinessException(ErrorCode.USER_ALREADY_PAIRED, "对方已经配对过了");
         }
         
         // 检查目标用户状态
         if (!targetUser.isActive()) {
-            throw new BusinessException("目标用户状态异常");
+            throw new BusinessException(ErrorCode.USER_DISABLED, "目标用户状态异常");
         }
         
         // 执行配对
@@ -110,8 +117,8 @@ public class UserService {
         targetUser.setPartnerId(currentUser.getId());
         targetUser.setPairDate(now);
         
-        userRepository.save(currentUser);
-        userRepository.save(targetUser);
+        userMapper.updateById(currentUser);
+        userMapper.updateById(targetUser);
         
         log.info("用户配对成功: userId1={}, userId2={}", userId, targetUser.getId());
         
@@ -124,30 +131,31 @@ public class UserService {
     @Transactional
     public UserInfoResponse unpair() {
         Long userId = SecurityUtil.getCurrentUserId();
-        User currentUser = userRepository.findById(userId)
-                .orElseThrow(() -> new BusinessException("用户不存在"));
+        User currentUser = userMapper.selectById(userId);
+        if (currentUser == null) {
+            throw new BusinessException(ErrorCode.USER_NOT_FOUND);
+        }
         
         // 检查是否已配对
         if (!currentUser.hasPaired()) {
-            throw new BusinessException("您还没有配对");
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "您还没有配对");
         }
         
         // 查找配对对象
-        User partner = userRepository.findById(currentUser.getPartnerId())
-                .orElse(null);
+        User partner = userMapper.selectById(currentUser.getPartnerId());
         
         // 取消当前用户的配对
         currentUser.setIsPaired(false);
         currentUser.setPartnerId(null);
         currentUser.setPairDate(null);
-        userRepository.save(currentUser);
+        userMapper.updateById(currentUser);
         
         // 取消配对对象的配对
         if (partner != null) {
             partner.setIsPaired(false);
             partner.setPartnerId(null);
             partner.setPairDate(null);
-            userRepository.save(partner);
+            userMapper.updateById(partner);
         }
         
         log.info("用户取消配对成功: userId={}, partnerId={}", userId, partner != null ? partner.getId() : null);
@@ -160,8 +168,10 @@ public class UserService {
      */
     public UserSettings getUserSettings() {
         Long userId = SecurityUtil.getCurrentUserId();
-        return userSettingsRepository.findByUserId(userId)
-                .orElseThrow(() -> new BusinessException("用户设置不存在"));
+        return userSettingsMapper.selectOne(
+                new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<UserSettings>()
+                        .eq("user_id", userId)
+        );
     }
     
     /**
@@ -170,8 +180,13 @@ public class UserService {
     @Transactional
     public UserSettings updateUserSettings(UserSettingsUpdateRequest request) {
         Long userId = SecurityUtil.getCurrentUserId();
-        UserSettings settings = userSettingsRepository.findByUserId(userId)
-                .orElseThrow(() -> new BusinessException("用户设置不存在"));
+        UserSettings settings = userSettingsMapper.selectOne(
+                new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<UserSettings>()
+                        .eq("user_id", userId)
+        );
+        if (settings == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND, "用户设置不存在");
+        }
         
         // 更新设置
         if (request.getThemeMode() != null) {
@@ -202,7 +217,7 @@ public class UserService {
             settings.setTimezone(request.getTimezone());
         }
         
-        userSettingsRepository.save(settings);
+        userSettingsMapper.updateById(settings);
         
         log.info("用户设置更新成功: userId={}", userId);
         
@@ -228,7 +243,7 @@ public class UserService {
         
         // 设置配对对象信息
         if (user.hasPaired()) {
-            User partner = userRepository.findById(user.getPartnerId()).orElse(null);
+            User partner = userMapper.selectById(user.getPartnerId());
             if (partner != null) {
                 UserInfoResponse.PartnerInfo partnerInfo = new UserInfoResponse.PartnerInfo();
                 partnerInfo.setId(partner.getId());

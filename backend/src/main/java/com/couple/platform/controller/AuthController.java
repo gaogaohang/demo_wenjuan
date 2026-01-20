@@ -45,7 +45,7 @@ public class AuthController {
     @PostMapping("/sms/send")
     public ApiResponse<Void> sendSmsCode(@Valid @RequestBody SendSmsRequest request) {
         authService.sendSmsCode(request);
-        return ApiResponse.success("验证码发送成功");
+        return ApiResponse.success("验证码发送成功", null);
     }
     
     @Operation(summary = "刷新访问令牌", description = "使用刷新令牌获取新的访问令牌")
@@ -60,6 +60,6 @@ public class AuthController {
     public ApiResponse<Void> logout() {
         // JWT是无状态的，登出只需要客户端删除令牌
         // 如果需要服务端验证，可以将令牌加入黑名单
-        return ApiResponse.success("登出成功");
+        return ApiResponse.success("登出成功", null);
     }
 }

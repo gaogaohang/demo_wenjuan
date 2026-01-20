@@ -4,10 +4,11 @@ import com.couple.platform.dto.auth.*;
 import com.couple.platform.entity.Admin;
 import com.couple.platform.entity.User;
 import com.couple.platform.entity.UserSettings;
+import com.couple.platform.enums.ErrorCode;
 import com.couple.platform.exception.BusinessException;
-import com.couple.platform.repository.AdminRepository;
-import com.couple.platform.repository.UserRepository;
-import com.couple.platform.repository.UserSettingsRepository;
+import com.couple.platform.mapper.AdminMapper;
+import com.couple.platform.mapper.UserMapper;
+import com.couple.platform.mapper.UserSettingsMapper;
 import com.couple.platform.utils.JwtUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -29,9 +30,9 @@ import java.util.concurrent.TimeUnit;
 @RequiredArgsConstructor
 public class AuthService {
     
-    private final UserRepository userRepository;
-    private final AdminRepository adminRepository;
-    private final UserSettingsRepository userSettingsRepository;
+    private final UserMapper userMapper;
+    private final AdminMapper adminMapper;
+    private final UserSettingsMapper userSettingsMapper;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
     private final RedisTemplate<String, Object> redisTemplate;
@@ -53,17 +54,17 @@ public class AuthService {
         
         // 验证密码一致性
         if (!request.getPassword().equals(request.getConfirmPassword())) {
-            throw new BusinessException("两次输入的密码不一致");
+            throw new BusinessException(400, "两次输入的密码不一致");
         }
         
         // 检查手机号是否已注册
-        if (userRepository.existsByPhone(request.getPhone())) {
-            throw new BusinessException("该手机号已注册");
+        if (userMapper.existsByPhone(request.getPhone())) {
+            throw new BusinessException(400, "该手机号已注册");
         }
         
         // 检查用户名是否已存在
-        if (request.getUsername() != null && userRepository.existsByUsername(request.getUsername())) {
-            throw new BusinessException("用户名已存在");
+        if (request.getUsername() != null && userMapper.existsByUsername(request.getUsername())) {
+            throw new BusinessException(400, "用户名已存在");
         }
         
         // 创建用户
@@ -77,12 +78,12 @@ public class AuthService {
         user.setIsPaired(false);
         user.setPairCode(generatePairCode());
         
-        userRepository.save(user);
+        userMapper.insert(user);
         
         // 创建用户设置
         UserSettings userSettings = new UserSettings();
         userSettings.setUserId(user.getId());
-        userSettingsRepository.save(userSettings);
+        userSettingsMapper.insert(userSettings);
         
         // 删除短信验证码
         deleteSmsCode(request.getPhone());
@@ -104,23 +105,23 @@ public class AuthService {
      */
     public AuthResponse userLogin(UserLoginRequest request) {
         // 查找用户
-        User user = userRepository.findByPhone(request.getAccount())
-                .or(() -> userRepository.findByUsername(request.getAccount()))
-                .orElseThrow(() -> new BusinessException("用户不存在"));
+        User user = userMapper.findByPhone(request.getAccount())
+                .or(() -> userMapper.findByUsername(request.getAccount()))
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
         
         // 验证密码
         if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
-            throw new BusinessException("密码错误");
+            throw new BusinessException(ErrorCode.INVALID_CREDENTIALS, "密码错误");
         }
         
         // 检查用户状态
         if (!user.isActive()) {
-            throw new BusinessException("账号已被禁用");
+            throw new BusinessException(ErrorCode.USER_DISABLED, "账号已被禁用");
         }
         
         // 更新登录信息
         user.setLastLoginTime(LocalDateTime.now());
-        userRepository.save(user);
+        userMapper.updateById(user);
         
         // 生成令牌
         String accessToken = jwtUtil.generateUserToken(user.getId(), user.getUsername());
@@ -139,22 +140,22 @@ public class AuthService {
      */
     public AuthResponse adminLogin(AdminLoginRequest request) {
         // 查找管理员
-        Admin admin = adminRepository.findByUsername(request.getUsername())
-                .orElseThrow(() -> new BusinessException("管理员不存在"));
+        Admin admin = adminMapper.findByUsername(request.getUsername())
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "管理员不存在"));
         
         // 验证密码
         if (!passwordEncoder.matches(request.getPassword(), admin.getPassword())) {
-            throw new BusinessException("密码错误");
+            throw new BusinessException(ErrorCode.INVALID_CREDENTIALS, "密码错误");
         }
         
         // 检查管理员状态
         if (!admin.isActive()) {
-            throw new BusinessException("账号已被禁用");
+            throw new BusinessException(ErrorCode.USER_DISABLED, "账号已被禁用");
         }
         
         // 更新登录信息
         admin.setLastLoginTime(LocalDateTime.now());
-        adminRepository.save(admin);
+        adminMapper.updateById(admin);
         
         // 生成令牌
         String accessToken = jwtUtil.generateAdminToken(admin.getId(), admin.getUsername());
@@ -178,7 +179,7 @@ public class AuthService {
         // 检查发送频率限制
         String rateLimitKey = SMS_CODE_PREFIX + "rate:" + phone;
         if (redisTemplate.hasKey(rateLimitKey)) {
-            throw new BusinessException("发送过于频繁，请稍后再试");
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "发送过于频繁，请稍后再试");
         }
         
         // 生成验证码
@@ -209,18 +210,22 @@ public class AuthService {
             
             AuthResponse.UserInfo userInfo;
             if ("user".equals(userType)) {
-                User user = userRepository.findById(userId)
-                        .orElseThrow(() -> new BusinessException("用户不存在"));
+                User user = userMapper.selectById(userId);
+                if (user == null) {
+                    throw new BusinessException(ErrorCode.USER_NOT_FOUND, "用户不存在");
+                }
                 userInfo = buildUserInfo(user);
             } else {
-                Admin admin = adminRepository.findById(userId)
-                        .orElseThrow(() -> new BusinessException("管理员不存在"));
+                Admin admin = adminMapper.selectById(userId);
+                if (admin == null) {
+                    throw new BusinessException(ErrorCode.NOT_FOUND, "管理员不存在");
+                }
                 userInfo = buildAdminInfo(admin);
             }
             
             return new AuthResponse(newAccessToken, refreshToken, jwtExpiration / 1000, userInfo);
         } catch (Exception e) {
-            throw new BusinessException("刷新令牌失败");
+            throw new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR, "刷新令牌失败");
         }
     }
     
@@ -232,11 +237,11 @@ public class AuthService {
         String savedCode = (String) redisTemplate.opsForValue().get(codeKey);
         
         if (savedCode == null) {
-            throw new BusinessException("验证码已过期");
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "验证码已过期");
         }
         
         if (!savedCode.equals(code)) {
-            throw new BusinessException("验证码错误");
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "验证码错误");
         }
     }
     
@@ -273,7 +278,7 @@ public class AuthService {
             for (int i = 0; i < 8; i++) {
                 code.append(chars.charAt(random.nextInt(chars.length())));
             }
-        } while (userRepository.existsByPairCode(code.toString()));
+        } while (userMapper.existsByPairCode(code.toString()));
         
         return code.toString();
     }
